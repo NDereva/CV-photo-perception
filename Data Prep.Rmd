@@ -22,6 +22,7 @@ Luckily they [shared the collected data](https://docs.google.com/spreadsheets/d/
 ```{r}
 rm(list = ls())
 library(tidyverse)
+library(here)
 ```
 
 Set locale to display Russian characters properly
@@ -30,8 +31,9 @@ Set locale to display Russian characters properly
 Sys.setlocale("LC_CTYPE", "russian")
 ```
 
-```{r}
-d <- read_csv("How CV photo influence feel of competence (in Russia).csv")
+```{r message=FALSE}
+d <- read_csv(here("raw data",
+                   "How CV photo influence feel of competence (in Russia).csv"))
 ```
 
 ```{r}
@@ -41,12 +43,292 @@ head(d)
 First of all, I need to translate data into english to make the further analysis easier Meanwhile, I will delete the columns I do not need for the analysis
 
 ```{r}
-d %>% 
+d <- d %>% 
   rename(resp_sex = `Укажите свой пол`,        # resp for responder
          resp_age = `Укажите свой возраст`,
-         resp_recruting = `Насколько часто вы участвуете в найме людей?`,
-         model_id = `Номер участника`,
-         model_sex = `Пол участника`,
-         model_emotion = `Эмоция`,
-         competency_feel = `Оценка`)
+         resp_hire = `Насколько часто вы участвуете в найме людей?`,
+         cand_id = `Номер участника`,         #cand for candidate
+         cand_sex = `Пол участника`,
+         cand_smile = `Эмоция`,               
+         cand_select = `Выбор участника`,     # which photo cand finds the best
+         cand_competency = `Оценка`)          # subjective assessment of cand competency
 ```
+
+```{r}
+d <- d %>% 
+  select(starts_with("resp"),
+         starts_with("cand"))
+
+d
+```
+
+## Transform variables to factor and translate
+
+
+### trasform responder's sex
+```{r}
+d <- d %>% 
+  mutate(resp_sex = if_else(resp_sex == "Женский", "F", "M")) %>% 
+  mutate(resp_sex = as_factor(resp_sex))
+
+d %>% 
+  count(resp_sex)
+```
+
+
+### transform resp_age
+
+```{r}
+d %>% 
+  count(resp_age)
+```
+
+
+```{r}
+lvl <- c("<25", "26-35", "36-45", "46-55", ">56")
+
+d <- d %>% 
+  mutate(resp_age = if_else(resp_age == "до 25", "<25",  resp_age)) %>% 
+  mutate(resp_age = if_else(resp_age == "больше 56", ">56", resp_age)) %>% 
+  mutate(resp_age = factor(resp_age, levels = lvl))
+
+```
+
+```{r}
+levels(d$resp_age)
+```
+
+### transform resp hire
+
+This variable indicates how often the responder was involved with the hiring 
+procedure
+
+```{r}
+d %>% count(resp_hire)
+```
+
+```{r}
+d <- d %>% 
+  mutate(resp_hire = case_when(resp_hire == "Никогда не участвовал" ~ "never",
+                               resp_hire == "Иногда" ~ "sometimes",
+         resp_hire ==  "Это часть моих рабочих обязанностей, участвую постоянно" ~ "always")) %>% 
+  mutate(resp_hire = factor(resp_hire, levels = c("never", "sometimes", "always"))) 
+
+```
+
+
+```{r}
+levels(d$resp_hire)
+```
+
+### transform cand_id
+
+```{r}
+d %>% count(cand_id)
+```
+each candidate has equal number of responses 
+
+```{r}
+d <- d %>% 
+  mutate(cand_id = as_factor(cand_id))
+```
+
+
+### transform cand_sex
+
+```{r}
+d %>% count(cand_sex)
+```
+```{r}
+d <- d %>% 
+  mutate(cand_sex = if_else(cand_sex == "Ж", "F", "M")) %>% 
+  mutate(cand_sex = as_factor(cand_sex))
+```
+
+
+### transform cand_smile
+
+```{r}
+d %>% count(cand_smile)
+```
+
+```{r}
+d <- d %>% 
+  mutate(cand_smile = case_when(cand_smile == "Серьезное лицо" ~ "no",
+                                cand_smile == "Сдеражнная улыбка" ~ "small",
+                                cand_smile == "Широкая улыбка" ~ "big")) %>% 
+  mutate(cand_smile = factor(cand_smile, levels = c("no", "small", "big")))
+```
+
+
+```{r}
+levels(d$cand_smile)
+```
+
+
+### transform cand_select
+
+```{r}
+table(d$cand_id, d$cand_select)
+```
+
+```{r}
+d <- d %>% 
+  mutate(cand_select = if_else(cand_select == "Да", 1, 0)) %>% 
+  mutate(cand_select = as_factor(cand_select))
+```
+
+
+Each candidate submitted 3 photos. The photo which candidate think is the best
+for CV have a value of 1 in cand_select variable
+
+
+### transform cand_competency 
+
+I will transform cand_competency so it lays between 0 and 1. 
+To make setting priors easier
+
+```{r}
+d %>% count(cand_competency)
+```
+
+```{r}
+d <- d %>% 
+  mutate(cand_competency = cand_competency / max(cand_competency))
+```
+
+
+```{r}
+ggplot(d, aes(x = cand_competency)) +
+  geom_histogram() +
+  theme_minimal()
+```
+
+
+
+```{r}
+head(d)
+```
+
+It seems that I have done with data preparation
+
+
+## Modeling 
+
+Lets try to fit simple model 
+```{r}
+library(brms)
+library(tidybayes)
+```
+
+
+Lets start with the linear model just with intercepts for each smile type
+Obviously linear model is not perfectly suitable because of the type of response 
+variable. For example, the distance between 0 and 1 might be different with the 5 and 6 for.
+
+### Intercept model
+
+```{r}
+m.1 <- 
+  brm(data = d, 
+      family = gaussian,
+      cand_competency ~ 0 + cand_smile,   # 0 indicates that there is separate intercept
+                                          # for each smile type
+      prior = c(prior(normal(0.5, 0.25), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 1,
+      file = "fits/m.1")
+```
+
+```{r}
+print(m.1)
+```
+
+```{r}
+plot(m.1)
+```
+
+```{r}
+mcmc_plot(m.1, pars = "b_")
+```
+
+The result resemble the one in the blogpost. 
+Candidates with small smile look slightly more competent 
+
+
+Lets try to fit model with random slopes varying across candidates
+
+### Random slopes varying by candidate
+
+```{r}
+m.2 <- 
+  brm(data = d, 
+      family = gaussian,
+      cand_competency ~ 0 + cand_smile + # separate intercept for each smile type
+        (1 | cand_id),                   # varying intercept by candidates 
+      prior = c(prior(normal(0.5, 0.25), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 1,
+      file = "fits/m.2")
+```
+model took 10 seconds to estimate
+
+```{r}
+print(m.2)
+```
+
+
+```{r}
+mcmc_plot(m.2, pars = "b_")
+```
+
+
+
+### Varying slopes and intercepts
+
+Lets try to add slopes varying by sex to intercepts
+
+```{r}
+m.3 <- 
+  brm(data = d, 
+      family = gaussian,
+      cand_competency ~ 0 + cand_smile + # separate intercept for each smile type
+        (1 + cand_sex || cand_id),        # uncorrelated random slope and intercept
+      prior = c(prior(normal(0.5, 0.25), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 3000, warmup = 1000, chains = 4, cores = 4,
+      control = list(adapt_delta = 0.98),
+      seed = 3,
+      file = "fits/m.3")
+```
+
+```{r}
+print(m.3)
+```
+
+
+
+```{r}
+mcmc_plot(m.2, pars = "b_")
+```
+The estimates are quite the same as in 2nd model 
+
+Just for the sake of and experiment I will try an alternative model specification
+
+```{r}
+m.4 <- 
+  brm(data = d, 
+      family = gaussian,
+      cand_competency ~ 0 + cand_smile + # separate intercept for each smile type
+        (1 | cand_id) +        # random intercept varying by candidate
+        (1 | cand_sex),        # random intercept varying by cand_sex
+      prior = c(prior(normal(0.5, 0.2), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "fits/m.4")
+```
+
+ 
