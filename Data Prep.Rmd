@@ -1,0 +1,52 @@
+---
+title: "Data prep"
+author: "Mykola Dereva"
+date: "5/18/2021"
+output: html_document
+---
+
+## Project description
+
+The project was inspired by this [blogpost](https://habr.com/ru/company/yandex_praktikum/blog/557256/) (in russian).
+
+The idea is that they make questionnaire to check how CV photo influence on the subjective perception of candidate competency.
+
+They claim that small smile on candidate's CV photo, slightly increase the perception of candidate competency
+
+However, the blogpost lack of any kind of statistical data analysis and relies only on descriptive statistics.
+
+Luckily they [shared the collected data](https://docs.google.com/spreadsheets/d/1QJbmdpYDQz5mpiqyg08Z5RuP--2q2m893to401wUbi0/edit#gid=41231417) of questionnaire, so I can play with the data on my own and check their findings.
+
+## Load data
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+```
+
+Set locale to display Russian characters properly
+
+```{r}
+Sys.setlocale("LC_CTYPE", "russian")
+```
+
+```{r}
+d <- read_csv("How CV photo influence feel of competence (in Russia).csv")
+```
+
+```{r}
+head(d)
+```
+
+First of all, I need to translate data into english to make the further analysis easier Meanwhile, I will delete the columns I do not need for the analysis
+
+```{r}
+d %>% 
+  rename(resp_sex = `Укажите свой пол`,        # resp for responder
+         resp_age = `Укажите свой возраст`,
+         resp_recruting = `Насколько часто вы участвуете в найме людей?`,
+         model_id = `Номер участника`,
+         model_sex = `Пол участника`,
+         model_emotion = `Эмоция`,
+         competency_feel = `Оценка`)
+```
