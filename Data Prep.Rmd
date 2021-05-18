@@ -323,12 +323,25 @@ m.4 <-
       family = gaussian,
       cand_competency ~ 0 + cand_smile + # separate intercept for each smile type
         (1 | cand_id) +        # random intercept varying by candidate
-        (1 | cand_sex),        # random intercept varying by cand_sex
+        cand_sex:resp_sex,        # interaction between responder and cand sex
       prior = c(prior(normal(0.5, 0.2), class = b),
                 prior(exponential(1), class = sigma)),
-      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      iter = 4000, warmup = 2000, chains = 4, cores = 4,
+      control = list(adapt_delta = 0.98),
       seed = 4,
       file = "fits/m.4")
 ```
 
+```{r}
+print(m.4)
+```
  
+```{r}
+mcmc_plot(m.4, pars = "cand_sexF")
+```
+
+
+```{r}
+mcmc_plot(m.4, pars = "cand_sexM")
+```
+
