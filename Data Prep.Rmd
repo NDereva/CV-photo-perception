@@ -462,10 +462,25 @@ mcmc_plot(m.7, pars = "b_cand")
 m.8 <- 
   brm(data = d, 
       family = cumulative,
-      cand_competency_fct ~ 1 + cand_smile + cand_sex + (1 | cand_id),
+      cand_competency_fct ~ 1 + cand_smile + cand_sex + resp_sex + resp_hire +
+        (1 | cand_id),
       prior = c(prior(normal(0, 2), class = Intercept),
                 prior(normal(0, 0.5), class = b)),
       iter = 2000, warmup = 1000, cores = 4, chains = 4,
       seed = 12,
       file = "fits/m.8")
 ```
+
+
+```{r}
+print(m.8)
+```
+
+```{r}
+mcmc_plot(m.8, pars = "b_cand")
+```
+
+```{r}
+mcmc_plot(m.8, pars = "b_resp")
+```
+
