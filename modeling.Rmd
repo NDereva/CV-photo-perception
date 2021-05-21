@@ -280,7 +280,11 @@ mcmc_plot(m.8, pars = "b_resp")
 
 
 ```{r}
+<<<<<<< HEAD
 pp_check(m.8, type = "bars_grouped", nsamples = 100, group = "cand_smile")
+=======
+pp_check(m.8, type = "bars", nsamples = 100)
+>>>>>>> 7143175f8ae178625291326f55b6c0841e9b8bcf
 ```
 
 
